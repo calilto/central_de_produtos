@@ -24,12 +24,12 @@ const getMonthlyRate = (annualRate) => {
     return (Math.pow(1 + annualRate / 100, 1 / 12) - 1) * 100;
 };
 
-// Alíquota IR Regressivo (baseado na regra especificada pelo usuário)
+// Alíquota IR Regressivo (baseado na regra Brasil)
 const getIRRate = (months) => {
     if (months <= 6) return 22.5;
-    if (months <= 12) return 20.0;
+    if (months < 12) return 20.0;
     if (months <= 24) return 17.5;
-    return 15.0; // Acima de 24 meses (25+)
+    return 15.0; // Acima de 24 meses
 };
 
 // Gera cores para o gráfico (THEME: EuroStock / Dark)
@@ -48,8 +48,8 @@ const COLORS = {
  */
 const Card = ({ title, value, subtext, icon: Icon, highlight = false, meetingMode }) => (
     <div className={`p-4 rounded-xl border transition-all duration-200 ${highlight
-            ? 'bg-neutral-800 text-white border-yellow-500 shadow-lg shadow-yellow-900/20'
-            : 'bg-neutral-900 border-neutral-800 text-neutral-100 shadow-sm hover:border-neutral-700'
+        ? 'bg-neutral-800 text-white border-yellow-500 shadow-lg shadow-yellow-900/20'
+        : 'bg-neutral-900 border-neutral-800 text-neutral-100 shadow-sm hover:border-neutral-700'
         }`}>
         <div className="flex justify-between items-start mb-2">
             <span className={`text-sm font-medium ${highlight ? 'text-neutral-300' : 'text-neutral-400'}`}>{title}</span>
@@ -90,8 +90,8 @@ const Toggle = ({ active, onClick, label }) => (
     <button
         onClick={onClick}
         className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${active
-                ? 'bg-neutral-800 text-yellow-400 ring-1 ring-yellow-500/50'
-                : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800 border border-neutral-800'
+            ? 'bg-neutral-800 text-yellow-400 ring-1 ring-yellow-500/50'
+            : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800 border border-neutral-800'
             }`}
     >
         {active ? <Check size={14} /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-neutral-600" />}
@@ -110,19 +110,23 @@ const TabCDB = ({ meetingMode }) => {
     const [periodMonths, setPeriodMonths] = useState(24);
     const [showCopied, setShowCopied] = useState(false);
 
-    const adjustRate = (delta) => setAnnualRate(prev => Math.max(0, Number((prev + delta).toFixed(2))));
+    const numPrincipal = Number(principal) || 0;
+    const numAnnualRate = Number(annualRate) || 0;
+    const numPeriodMonths = Math.max(1, Number(periodMonths) || 1);
 
-    const monthlyRate = getMonthlyRate(annualRate);
+    const adjustRate = (delta) => setAnnualRate(prev => Math.max(0, Number((Number(prev) + delta).toFixed(2))));
+
+    const monthlyRate = getMonthlyRate(numAnnualRate);
 
     // Simulação de Renda Mensal (Sem juros compostos no montante principal)
     const simulationData = useMemo(() => {
         let data = [];
-        const grossMonthlyYield = principal * (monthlyRate / 100);
+        const grossMonthlyYield = numPrincipal * (monthlyRate / 100);
 
         let totalGross = 0;
         let totalNet = 0;
 
-        for (let m = 1; m <= periodMonths; m++) {
+        for (let m = 1; m <= numPeriodMonths; m++) {
             const irRate = getIRRate(m);
             const tax = grossMonthlyYield * (irRate / 100);
             const netMonthlyYield = grossMonthlyYield - tax;
@@ -140,14 +144,14 @@ const TabCDB = ({ meetingMode }) => {
             });
         }
         return { dailyData: data, totalGross, totalNet };
-    }, [principal, monthlyRate, periodMonths]);
+    }, [numPrincipal, monthlyRate, numPeriodMonths]);
 
     const { dailyData, totalNet } = simulationData;
     const lastMonth = dailyData[dailyData.length - 1];
     const firstMonth = dailyData[0];
 
     const copyPitch = () => {
-        const text = `💰 *Simulação EuroStock - Renda Mensal CDB*\n\nInvestimento: ${formatCurrency(principal)}\nTaxa: ${annualRate}% a.a.\nPrazo: ${periodMonths} meses\n\n📊 *Fluxo Mensal Estimado:*\nMês 1 (Líquido): ${formatCurrency(firstMonth.netYield)}\nMês 25+ (Líquido): ${formatCurrency(dailyData.find(d => d.month >= 25)?.netYield || lastMonth.netYield)}\n\n*Total Líquido no Bolso:* ${formatCurrency(totalNet)}`;
+        const text = `💰 *Simulação EuroStock - Renda Mensal CDB*\n\nInvestimento: ${formatCurrency(numPrincipal)}\nTaxa: ${numAnnualRate}% a.a.\nPrazo: ${numPeriodMonths} meses\n\n📊 *Fluxo Mensal Estimado:*\nMês 1 (Líquido): ${formatCurrency(firstMonth.netYield)}\nMês 25+ (Líquido): ${formatCurrency(dailyData.find(d => d.month >= 25)?.netYield || lastMonth.netYield)}\n\n*Total Líquido no Bolso:* ${formatCurrency(totalNet)}`;
 
         const textArea = document.createElement("textarea");
         textArea.value = text;
@@ -254,7 +258,7 @@ const TabCDB = ({ meetingMode }) => {
                         <tbody className="divide-y divide-neutral-800">
                             {dailyData.map((row) => {
                                 // Show first few, transition points (6, 7, 12, 13, 24, 25), and last
-                                const show = row.month <= 3 || row.month === 6 || row.month === 7 || row.month === 12 || row.month === 13 || row.month === 24 || row.month === 25 || row.month === periodMonths;
+                                const show = row.month <= 3 || row.month === 6 || row.month === 7 || row.month === 12 || row.month === 13 || row.month === 24 || row.month === 25 || row.month === numPeriodMonths;
                                 if (!show) return null;
 
                                 return (
@@ -283,14 +287,27 @@ const TabIsento = ({ meetingMode }) => {
     const [principal, setPrincipal] = useState(100000);
     const [annualRate, setAnnualRate] = useState(10.5);
     const [periodMonths, setPeriodMonths] = useState(12);
+    const [isAutoIr, setIsAutoIr] = useState(true);
+    const [customIrRate, setCustomIrRate] = useState(17.5);
 
-    const monthlyRate = getMonthlyRate(annualRate);
-    const finalAmount = principal * Math.pow(1 + monthlyRate / 100, periodMonths);
-    const totalYield = finalAmount - principal;
+    const numPrincipal = Number(principal) || 0;
+    const numAnnualRate = Number(annualRate) || 0;
+    const numPeriodMonths = Math.max(1, Number(periodMonths) || 1);
 
-    // Cálculo de Equivalência Baseado no Prazo Selecionado
-    const irRateForPeriod = getIRRate(periodMonths);
-    const equivalentCdbRate = annualRate / (1 - irRateForPeriod / 100);
+    const monthlyRate = getMonthlyRate(numAnnualRate);
+    const finalAmount = numPrincipal * Math.pow(1 + monthlyRate / 100, numPeriodMonths);
+    const totalYield = finalAmount - numPrincipal;
+
+    // Atualiza automaticamente o IR quando no modo auto e o prazo muda
+    useEffect(() => {
+        if (isAutoIr) {
+            setCustomIrRate(getIRRate(numPeriodMonths));
+        }
+    }, [numPeriodMonths, isAutoIr]);
+
+    // Cálculo de Equivalência
+    const irRateForPeriod = Number(customIrRate) || 0;
+    const equivalentCdbRate = numAnnualRate / (1 - irRateForPeriod / 100);
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -300,20 +317,43 @@ const TabIsento = ({ meetingMode }) => {
                 </div>
                 <div>
                     <h4 className="font-bold text-white">Simulador Isento vs Tributado</h4>
-                    <p className="text-sm text-neutral-400">Comparando LCI/LCA com CDB considerando a alíquota exata para <strong>{periodMonths} meses</strong> (IR de {irRateForPeriod}%).</p>
+                    <p className="text-sm text-neutral-400">Comparando LCI/LCA com CDB considerando a alíquota de <strong>{irRateForPeriod}%</strong> {isAutoIr ? '(Automática)' : '(Manual)'}.</p>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-neutral-900 p-5 rounded-xl shadow-sm border border-neutral-800">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-neutral-900 p-5 rounded-xl shadow-sm border border-neutral-800">
                 <InputField label="Valor Aplicado" value={principal} onChange={setPrincipal} suffix="R$" />
                 <InputField label="Taxa LCI/LCA (a.a.)" value={annualRate} onChange={setAnnualRate} suffix="%" />
                 <InputField label="Prazo do Investimento" value={periodMonths} onChange={setPeriodMonths} suffix="Meses" />
+
+                <div className="flex flex-col gap-1">
+                    <div className="flex justify-between items-center mb-0.5">
+                        <label className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Alíquota IR</label>
+                        <button
+                            onClick={() => setIsAutoIr(!isAutoIr)}
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${isAutoIr ? 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30' : 'bg-neutral-800 text-neutral-400 border-neutral-700'}`}
+                        >
+                            {isAutoIr ? 'AUTO' : 'MANUAL'}
+                        </button>
+                    </div>
+                    <div className="relative group">
+                        <input
+                            type="number"
+                            step="0.1"
+                            value={customIrRate}
+                            onChange={(e) => { setIsAutoIr(false); setCustomIrRate(e.target.value); }}
+                            className={`w-full p-2.5 border rounded-lg text-white font-medium focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500 outline-none transition-all group-hover:border-neutral-700 ${isAutoIr ? 'bg-neutral-900 border-neutral-800 opacity-80 cursor-not-allowed' : 'bg-black border-yellow-500/50'}`}
+                            readOnly={isAutoIr}
+                        />
+                        <span className="absolute right-3 top-2.5 text-neutral-500 text-sm font-medium pointer-events-none">%</span>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card title="Taxa Mensal Isenta" value={`${monthlyRate.toFixed(2)}%`} icon={TrendingUp} meetingMode={meetingMode} />
                 <Card title="Rendimento Total" value={formatCurrency(totalYield)} icon={TrendingUp} subtext="Líquido (Isento)" meetingMode={meetingMode} />
-                <Card title="CDB Equivalente (Gross Up)" value={`${equivalentCdbRate.toFixed(2)}%`} subtext={`Para bater essa LCI em ${periodMonths} meses`} icon={RefreshCw} highlight meetingMode={meetingMode} />
+                <Card title="CDB Equivalente (Gross Up)" value={`${equivalentCdbRate.toFixed(2)}%`} subtext={`Para bater essa LCI em ${numPeriodMonths} meses`} icon={RefreshCw} highlight meetingMode={meetingMode} />
             </div>
 
             <div className="bg-neutral-900 p-6 rounded-xl shadow-sm border border-neutral-800">
@@ -326,7 +366,7 @@ const TabIsento = ({ meetingMode }) => {
                             <span className="w-24 text-sm font-bold text-neutral-400 text-right">LCI/LCA</span>
                             <div className="flex-1 h-10 bg-neutral-800 rounded-r-lg relative group overflow-hidden border border-neutral-700">
                                 <div className="absolute top-0 left-0 h-full bg-yellow-500" style={{ width: '70%' }}></div>
-                                <span className="absolute left-3 top-2.5 text-sm font-bold text-black">{annualRate}% a.a.</span>
+                                <span className="absolute left-3 top-2.5 text-sm font-bold text-black">{numAnnualRate}% a.a.</span>
                             </div>
                         </div>
                         <div className="flex items-center gap-4">
@@ -342,7 +382,7 @@ const TabIsento = ({ meetingMode }) => {
                     <div className="bg-black p-4 rounded-lg border border-neutral-800 text-sm space-y-2">
                         <div className="flex justify-between border-b border-neutral-800 pb-2">
                             <span className="text-neutral-500">Prazo Selecionado</span>
-                            <span className="text-white font-medium">{periodMonths} meses</span>
+                            <span className="text-white font-medium">{numPeriodMonths} meses</span>
                         </div>
                         <div className="flex justify-between border-b border-neutral-800 pb-2">
                             <span className="text-neutral-500">Alíquota IR do Período</span>
@@ -374,16 +414,23 @@ const TabComposto = ({ meetingMode }) => {
     const [ipcaRate, setIpcaRate] = useState(4.5);
     const [ipcaSpread, setIpcaSpread] = useState(6.0);
 
+    const numPrincipal = Number(principal) || 0;
+    const numMonths = Math.max(1, Number(months) || 1);
+
     const getEffectiveAnnualRate = () => {
-        if (mode === 'pre') return preRate;
-        if (mode === 'cdi') return cdiRate * (percentCdi / 100);
-        if (mode === 'ipca') return ipcaRate + ipcaSpread;
+        if (mode === 'pre') return Number(preRate) || 0;
+        if (mode === 'cdi') return (Number(cdiRate) || 0) * ((Number(percentCdi) || 0) / 100);
+        if (mode === 'ipca') {
+            const txIpca = (Number(ipcaRate) || 0) / 100;
+            const txSpread = (Number(ipcaSpread) || 0) / 100;
+            return (((1 + txIpca) * (1 + txSpread)) - 1) * 100;
+        }
         return 0;
     };
 
     const effectiveAnnual = getEffectiveAnnualRate();
     const monthly = getMonthlyRate(effectiveAnnual);
-    const finalAmount = principal * Math.pow(1 + monthly / 100, months);
+    const finalAmount = numPrincipal * Math.pow(1 + monthly / 100, numMonths);
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -444,7 +491,7 @@ const TabComposto = ({ meetingMode }) => {
                     <h3 className="text-neutral-400 text-sm font-medium uppercase tracking-wider mb-1">Acumulado no Período</h3>
                     <div className="text-4xl font-bold text-yellow-400">{formatCurrency(finalAmount)}</div>
                     <div className="text-yellow-500/80 text-sm mt-1">
-                        Rentabilidade: {formatCurrency(finalAmount - principal)}
+                        Rentabilidade: {formatCurrency(finalAmount - numPrincipal)}
                     </div>
                 </div>
             </div>
@@ -459,16 +506,21 @@ const TabCenarioCDI = ({ meetingMode }) => {
     const [spread, setSpread] = useState(0);
     const [amount, setAmount] = useState(100000);
 
-    const calculateScenario = (rate) => {
-        const effective = rate + spread;
+    const numSpread = Number(spread) || 0;
+    const numAmount = Number(amount) || 0;
+    const numCdiCurrent = Number(cdiCurrent) || 0;
+    const numCdiProjected = Number(cdiProjected) || 0;
+
+    const calculateScenario = (rateNum) => {
+        const effective = rateNum + numSpread;
         const monthly = getMonthlyRate(effective);
-        const yr1 = amount * Math.pow(1 + monthly / 100, 12);
-        const yr2 = amount * Math.pow(1 + monthly / 100, 24);
+        const yr1 = numAmount * Math.pow(1 + monthly / 100, 12);
+        const yr2 = numAmount * Math.pow(1 + monthly / 100, 24);
         return { effective, monthly, yr1, yr2 };
     };
 
-    const cenarioA = calculateScenario(cdiCurrent);
-    const cenarioB = calculateScenario(cdiProjected);
+    const cenarioA = calculateScenario(numCdiCurrent);
+    const cenarioB = calculateScenario(numCdiProjected);
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -484,7 +536,7 @@ const TabCenarioCDI = ({ meetingMode }) => {
                 <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
                     <div className="bg-black p-4 border-b border-neutral-800 flex justify-between items-center">
                         <h3 className="font-bold text-neutral-300">Cenário A: Manutenção</h3>
-                        <span className="bg-neutral-800 text-neutral-300 text-xs px-2 py-1 rounded font-mono border border-neutral-700">CDI {cdiCurrent}%</span>
+                        <span className="bg-neutral-800 text-neutral-300 text-xs px-2 py-1 rounded font-mono border border-neutral-700">CDI {numCdiCurrent}%</span>
                     </div>
                     <div className="p-6">
                         <div className="flex justify-between mb-4">
@@ -508,7 +560,7 @@ const TabCenarioCDI = ({ meetingMode }) => {
                 <div className="bg-neutral-900 border-2 border-yellow-500/30 rounded-xl overflow-hidden shadow-lg shadow-yellow-900/10">
                     <div className="bg-yellow-500/10 p-4 border-b border-yellow-500/20 flex justify-between items-center">
                         <h3 className="font-bold text-yellow-500">Cenário B: Projeção</h3>
-                        <span className="bg-yellow-500/20 text-yellow-500 text-xs px-2 py-1 rounded font-mono border border-yellow-500/30">CDI {cdiProjected}%</span>
+                        <span className="bg-yellow-500/20 text-yellow-500 text-xs px-2 py-1 rounded font-mono border border-yellow-500/30">CDI {numCdiProjected}%</span>
                     </div>
                     <div className="p-6">
                         <div className="flex justify-between mb-4">
@@ -534,7 +586,7 @@ const TabCenarioCDI = ({ meetingMode }) => {
 
             <div className="bg-black p-4 rounded-lg border border-neutral-800 text-sm text-neutral-400">
                 <Info size={16} className="inline mr-2 mb-0.5 text-yellow-500" />
-                <strong>Impacto do Spread:</strong> Adicionar um spread de {spread}% ao CDI ajuda a mitigar a queda da Selic. No Cenário B, o retorno efetivo seria de <strong>{(cdiProjected + spread).toFixed(2)}% a.a.</strong>
+                <strong>Impacto do Spread:</strong> Adicionar um spread de {spread}% ao CDI ajuda a mitigar a queda da Selic. No Cenário B, o retorno efetivo seria de <strong>{(numCdiProjected + numSpread).toFixed(2)}% a.a.</strong>
             </div>
         </div>
     );
@@ -595,8 +647,8 @@ const EurostockRelatorio = ({ onClose }) => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === tab.id
-                                        ? 'border-yellow-500 text-yellow-500'
-                                        : 'border-transparent text-neutral-500 hover:text-neutral-300 hover:border-neutral-700'
+                                    ? 'border-yellow-500 text-yellow-500'
+                                    : 'border-transparent text-neutral-500 hover:text-neutral-300 hover:border-neutral-700'
                                     }`}
                             >
                                 <tab.icon size={16} />

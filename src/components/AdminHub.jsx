@@ -5,14 +5,9 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * Nota de Segurança:
- * A listagem e deleção de usuários pela rota auth.admin necessita
- * da VITE_SUPABASE_SERVICE_ROLE_KEY. Se não tiver no .env, não funcionará.
+ * A listagem e deleção de usuários agora é feita via endpoints seguros em /api.
+ * O front-end não possui acesso à Service Role Key.
  */
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://yscpojzcxrbjhipnodlk.supabase.co';
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-
-// Inicializa o admin (só funcionará se tiver a chave certa)
-const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
 
 export default function AdminHub() {
     const [users, setUsers] = useState([]);
@@ -23,15 +18,27 @@ export default function AdminHub() {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            if (!supabaseAdmin) throw new Error("Service Role Key não configurada no .env.local.");
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !sessionData?.session) throw new Error("Não autenticado");
 
-            const { data, error } = await supabaseAdmin.auth.admin.listUsers();
-            if (error) throw error;
+            const token = sessionData.session.access_token;
+            const res = await fetch("/api/admin-list-users", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ page: 1, perPage: 200 })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Erro ao carregar usuários");
+
             setUsers(data.users || []);
 
         } catch (err) {
             console.error(err);
-            setActionMessage({ text: 'Erro ao carregar usuários (Você configurou a Service Role Key no .env?)', type: 'error' });
+            setActionMessage({ text: `Erro: ${err.message}`, type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -45,8 +52,22 @@ export default function AdminHub() {
         if (!window.confirm(`Tem certeza que deseja BANIR o acesso de ${userEmail}?`)) return;
 
         try {
-            const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
-            if (error) throw error;
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !sessionData?.session) throw new Error("Não autenticado");
+
+            const token = sessionData.session.access_token;
+            const res = await fetch("/api/admin-delete-user", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ userId })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Erro ao deletar usuário");
+
             setActionMessage({ text: `Usuário ${userEmail} removido com sucesso.`, type: 'success' });
             setUsers(users.filter(u => u.id !== userId));
         } catch (err) {
@@ -57,8 +78,22 @@ export default function AdminHub() {
 
     const handlePasswordReset = async (userEmail) => {
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(userEmail);
-            if (error) throw error;
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !sessionData?.session) throw new Error("Não autenticado");
+
+            const token = sessionData.session.access_token;
+            const res = await fetch("/api/admin-reset-password", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ email: userEmail })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Erro ao redefinir senha");
+
             setActionMessage({ text: `E-mail de redefinição enviado para ${userEmail}.`, type: 'success' });
         } catch (err) {
             console.error(err);
@@ -80,16 +115,6 @@ export default function AdminHub() {
                         <p className="text-[13px] text-[#94A3B8] font-medium">Controle de acessos, listagem de assesores e redefinição de senhas.</p>
                     </div>
                 </div>
-
-                {!supabaseServiceKey && (
-                    <div className="mb-6 p-4 bg-[#2D1A1A] border border-[#F87171]/20 rounded-lg flex items-start gap-3 text-[#F87171] text-sm">
-                        <ShieldAlert className="w-5 h-5 shrink-0" />
-                        <div>
-                            <strong>Service Role Key Ausente!</strong><br />
-                            <p className="mt-1 text-[#E2E8F0]">Para listar e deletar usuários, você precisa adicionar a variável <code>VITE_SUPABASE_SERVICE_ROLE_KEY</code> no arquivo <code>.env.local</code>. Sem isso, a API Admin do Supabase bloqueia a requisição.</p>
-                        </div>
-                    </div>
-                )}
 
                 {actionMessage.text && (
                     <div className={`mb-6 p-4 rounded-lg flex items-center justify-between ${actionMessage.type === 'error' ? 'bg-[#2D1A1A] border border-[#F87171]/20 text-[#F87171]' : 'bg-[#1A2D24] border border-[#10B981]/20 text-[#10B981]'} text-sm`}>
